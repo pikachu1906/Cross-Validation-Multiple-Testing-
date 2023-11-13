@@ -1,0 +1,304 @@
+---
+title: "Empirical Challenge"
+output: html_notebook
+---
+
+```{r}
+data = read.csv("J:/MLBD/semiconductor.csv")
+```
+
+```{r}
+summary(data$SIG1)
+```
+
+```{r}
+head(data)
+```
+
+```{r}
+sum(is.na(data))
+
+```
+
+CHECK BALANCE
+
+```{r}
+table(data$FAIL)
+
+```
+
+```{r}
+duplicate_rows <- data[duplicated(data), ]
+
+if (nrow(duplicate_rows) > 0) {
+  cat("Duplicate rows found:\n")
+  print(duplicate_rows)
+} else {
+  cat("No duplicate rows found.\n")
+}
+```
+
+```{r}
+model = glm(FAIL ~ ., data= data, family=binomial)
+
+```
+
+```{r}
+summary(model)
+```
+
+```{r}
+deviance <- function(y, pred, family=c("gaussian","binomial")){
+  # Compute the deviance as a measure of prediction error
+  # analogous to the SSR in a regression model.
+  # y = vector of observed outcomes (binary)
+  # pred = vector of predicted outcomes (probabilities between 0 and 1)
+  family <- match.arg(family)
+  if(family=="gaussian"){
+    return( sum( (y-pred)^2 ) )
+    }else{
+  if(is.factor(y)) y <- as.numeric(y)>1
+    return( -2*sum( y*log(pred) + (1-y)*log(1-pred) ) )
+  }
+}
+R2 <- function(y, pred, family=c("gaussian","binomial")){
+  # Compute the R2 as a measure of goodness of fit for
+  # glm-estimated models.
+  # y = vector of observed outcomes (binary)
+  # pred = vector of predicted outcomes (probabilities between 0 and 1)
+  fam <- match.arg(family)
+  if(fam=="binomial"){
+    if(is.factor(y)){ y <- as.numeric(y)>1 }
+  }
+  dev <- deviance(y, pred, family=fam)
+  dev0 <- deviance(y, mean(y), family=fam)
+  return(1-dev/dev0)
+}
+
+```
+
+Graph for all p values and BH line cut off showing the ret dots
+
+```{r}
+p_values <- summary(model)$coefficients[, "Pr(>|z|)"]
+```
+
+```{r}
+hist(p_values, breaks = 100, col = "lightblue", main = "Histogram of P-values", xlab = "P-value")
+```
+
+```{r}
+# Calculate adjusted p-values using BH correction
+adjusted_p_values <- p.adjust(p_values, method = "BH")
+
+# Determine the BH cutoff
+bh_cutoff <- 0.1  # Define the desired FDR threshold
+
+# Create a plot of the p-values
+plot(1:length(p_values), adjusted_p_values, pch = 20, col = "blue", 
+     xlab = "Variable Index", ylab = "P-value", 
+     main = "Benjamini-Hochberg Procedure")
+
+# Add a line for the BH cutoff
+abline(h = bh_cutoff, col = "red", lty = 2)
+
+# Highlight p-values below the BH cutoff
+significant_variables <- which(adjusted_p_values <= bh_cutoff)
+points(significant_variables, adjusted_p_values[significant_variables], pch = 20, col = "green")
+
+# Add a legend
+legend("topright", legend = c("P-values", "BH Cutoff", "Significant P-values"),
+       col = c("blue", "red", "green"), pch = 20)
+
+
+```
+
+```{r}
+max(p_values[significant_variables])
+```
+
+```{r}
+p_values <- summary(model)$coefficients[, "Pr(>|z|)"]
+
+# Step 1: Sort the p-values
+sorted_p_values <- sort(p_values)
+
+
+# Create a plot of the p-values
+plot(1:length(sorted_p_values), sorted_p_values, pch = 20, col = "blue",
+     xlab = "Variable Index", ylab = "P-value",
+     main = "Benjamini-Hochberg Procedure")
+points(significant_variables, sorted_p_values[significant_variables], pch = 20, col = "green")
+# Add a line for the BH cutoff
+abline(h = bh_cutoff, col = "red", lty = 2)
+```
+
+```{r}
+
+# Adjust p-values using Benjamini-Hochberg correction
+adjusted_p_values <- p.adjust(p_values, method = "BH")
+
+# Identify significant variables after FDR control
+significant_variables <- which(adjusted_p_values <= 0.1)
+
+
+plot(1:length(p_values), p_values, pch = 20, col = "blue", xlab = "Variable Index", ylab = "P-value", main = "Benjamini-Hochberg Procedure")
+abline(h = 0.1, col = "red", lty = 2)
+```
+
+```{r}
+data_restricted <- data[, significant_variables]
+
+head(data_restricted)
+```
+
+```{r}
+table(data_restricted$FAIL)
+```
+
+```{r}
+dim(data_restricted)
+```
+
+```{r}
+model_restricted <- glm(FAIL ~ ., data = data_restricted, family = "binomial")
+```
+
+```{r}
+summary(model_restricted)
+```
+
+```{r}
+library(caret)
+ctrl <- trainControl(method = "cv", number = 5)
+```
+
+```{r}
+dataf = data
+dataf$FAIL <- factor(dataf$FAIL, levels = c("0", "1"))
+class(dataf$FAIL)
+
+```
+
+```{r}
+data_restrictedf = data_restricted
+data_restrictedf$FAIL <- factor(data_restrictedf$FAIL, levels = c("0", "1"))
+class(data_restrictedf$FAIL)
+```
+
+```{r}
+#r2_full <- R2(as.numeric(predict(model_full_cv, data), data$FAIL))
+
+#r2_restricted <- R2(predict(model_restricted_cv, data_restricted), data_restricted$FAIL)
+```
+
+```{r}
+set.seed(123)  # for reproducibility
+
+# Number of folds for cross-validation
+num_folds <- 5
+
+# Indices for cross-validation folds
+fold_indices <- sample(rep(1:num_folds, length.out = nrow(data)))
+
+# Initialize vectors to store predicted values and actual outcomes
+pred_full <- rep(NA, nrow(data))
+pred_restricted <- rep(NA, nrow(data_restricted))
+```
+
+```{r}
+# Perform cross-validation
+for (fold in 1:num_folds) {
+  # Split the data into training and testing sets for the current fold
+  train_data <- data[fold_indices != fold, ]
+  test_data <- data[fold_indices == fold, ]
+  
+  # Train the full model
+  model_full_cv <- glm(FAIL ~ ., data = train_data, family = "binomial")
+
+  # Predict on the test set
+  pred_full[fold_indices == fold] <- predict(model_full_cv, newdata = test_data, type = "response")
+
+}
+```
+
+```{r}
+
+set.seed(123)  # for reproducibility
+
+# Number of folds for cross-validation
+num_folds <- 5
+
+# Indices for cross-validation folds
+fold_indices <- sample(rep(1:num_folds, length.out = nrow(data_restricted)))
+
+# Initialize vectors to store predicted values and actual outcomes
+pred_restricted <- rep(NA, nrow(data_restricted))
+```
+
+```{r}
+# Perform cross-validation
+for (fold in 1:num_folds) {
+  # Split the data into training and testing sets for the current fold
+  train_data <- data_restricted[fold_indices != fold, ]
+  test_data <- data_restricted[fold_indices == fold, ]
+  
+  # Train the full model
+  model_res_cv <- glm(FAIL ~ ., data = train_data, family = "binomial")
+
+  # Predict on the test set
+  pred_restricted[fold_indices == fold] <- predict(model_res_cv, newdata = test_data, type = "response")
+
+}
+```
+
+```{r}
+deviance <- function(y, pred, family = c("gaussian", "binomial")) {
+  # Match the family argument
+  family <- match.arg(family)
+  
+  if (family == "gaussian") {
+    # For Gaussian family, compute the sum of squared differences
+    return(sum((y - pred)^2))
+  } else {
+    # For binomial family (e.g., logistic regression), calculate the binomial deviance
+    if (is.factor(y)) y <- as.numeric(y) > 1
+    return(-2 * sum(y * log(pred) + (1 - y) * log(1 - pred)))
+  }
+}
+```
+
+```{r}
+R2 <- function(y, pred, family = c("gaussian", "binomial")) {
+  # Match the family argument
+  fam <- match.arg(family)
+  
+  if (fam == "binomial") {
+    # For binomial family, ensure y is numeric (convert a factor to numeric)
+    if (is.factor(y)) y <- as.numeric(y) > 1
+  }
+  
+  # Calculate deviance for the model and deviance for the null model (mean model)
+  dev <- deviance(y, pred, family = fam)
+  dev0 <- deviance(y, mean(y), family = fam)
+  
+  # Calculate and return R-squared
+  return(1 - dev / dev0)
+}
+```
+
+```{r}
+# Calculate R-squared for the full model
+r2_full <- R2(data$FAIL, pred_full)
+
+# Calculate R-squared for the restricted model
+r2_restricted <- R2(data_restricted$FAIL, pred_restricted)
+```
+
+```{r}
+# Print results
+cat("R2 for the Full Model:", r2_full, "\n")
+cat("R2 for the Restricted Model:", r2_restricted, "\n")
+```
+
+Multiple testing - Increased likelihood of finding some significant results by chance even if there's no true effect
