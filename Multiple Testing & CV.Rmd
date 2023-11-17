@@ -1,14 +1,16 @@
 ---
-title: "Empirical Challenge"
-output: html_notebook
+title: "Multiple Testing & Cross Validation"
+output:
+  html_document:
+    df_print: paged
 ---
 
-```{r}
-data = read.csv("J:/MLBD/semiconductor.csv")
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-summary(data$SIG1)
+data = read.csv("C:/Users/rohit/Downloads/semiconductor.csv")
 ```
 
 ```{r}
@@ -18,6 +20,10 @@ head(data)
 ```{r}
 sum(is.na(data))
 
+```
+
+```{r}
+summary(data)
 ```
 
 CHECK BALANCE
@@ -114,37 +120,11 @@ legend("topright", legend = c("P-values", "BH Cutoff", "Significant P-values"),
 ```
 
 ```{r}
-max(p_values[significant_variables])
+p_values[significant_variables]
 ```
 
-```{r}
-p_values <- summary(model)$coefficients[, "Pr(>|z|)"]
-
-# Step 1: Sort the p-values
-sorted_p_values <- sort(p_values)
 
 
-# Create a plot of the p-values
-plot(1:length(sorted_p_values), sorted_p_values, pch = 20, col = "blue",
-     xlab = "Variable Index", ylab = "P-value",
-     main = "Benjamini-Hochberg Procedure")
-points(significant_variables, sorted_p_values[significant_variables], pch = 20, col = "green")
-# Add a line for the BH cutoff
-abline(h = bh_cutoff, col = "red", lty = 2)
-```
-
-```{r}
-
-# Adjust p-values using Benjamini-Hochberg correction
-adjusted_p_values <- p.adjust(p_values, method = "BH")
-
-# Identify significant variables after FDR control
-significant_variables <- which(adjusted_p_values <= 0.1)
-
-
-plot(1:length(p_values), p_values, pch = 20, col = "blue", xlab = "Variable Index", ylab = "P-value", main = "Benjamini-Hochberg Procedure")
-abline(h = 0.1, col = "red", lty = 2)
-```
 
 ```{r}
 data_restricted <- data[, significant_variables]
@@ -203,7 +183,6 @@ fold_indices <- sample(rep(1:num_folds, length.out = nrow(data)))
 
 # Initialize vectors to store predicted values and actual outcomes
 pred_full <- rep(NA, nrow(data))
-pred_restricted <- rep(NA, nrow(data_restricted))
 ```
 
 ```{r}
